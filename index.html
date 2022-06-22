@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.25.6/d3-legend.min.js"></script>
+    
+    <title>Population</title>
+    
+    <style>
+        body {
+            background-color: gray;
+        }
+        .tooltip {
+            position: absolute;
+            background: transparent;
+            padding: 10px;
+        }
+        svg text {
+            font-size: small;
+            
+        }
+    </style>
+</head>
+
+<body>
+    <svg></svg>
+    <div class="tooltip"></div>
+
+    <script>
+        function compileMap(sgmap, population) {
+            let min = 0;
+            let max = 0;
+            let finalData = {}
+
+            sgmap.features.forEach((feature) => {
+                population.forEach((zone) => {
+                    if (
+                        feature.properties.Name.toUpperCase() == zone.Subzone.toUpperCase()
+                    ) {
+                        finalData[feature.properties.Name] = parseInt(zone.Population);
+
+                        if (zone.Population != "-" || min > parseInt(zone.Population) || min == 0) {
+                            min = parseInt(zone.Population)
+                        }
+
+                        if (max < parseInt(zone.Population) || max == 0) {
+                            max = parseInt(zone.Population)
+                        }
+                    }
+                });
+            });
+
+            return [finalData, min, max]
+        }
+
+        let width = 1200, height = 900;
+
+        let svg = d3.select("svg")
+            .attr("viewBox", "0 0 " + width + " " + height)
+
+        // Load external data
+        Promise.all([d3.json("data/sgmap.json"), d3.csv("data/population2021.csv")]).then(data => {
+
+            console.log(data[0]);
+            console.log(data[1]);
+
+            listData = compileMap(data[0], data[1])
+            console.log(listData)
+
+            let plotColor = d3.scaleQuantize()
+                .domain([listData[1], listData[2]])
+                .range(d3.schemeSet3);
+
+            var legend = d3
+                .legendColor()
+                .scale(plotColor)
+                .shapeWidth(50)
+                .labels([listData[1], listData[2]])
+                .orient("vertical")
+                .title("Population");
+
+            // Map and projection
+            var projection = d3.geoMercator()
+                .center([103.851959, 1.290270])
+                .fitExtent([
+                    [20, 20],
+                    [980, 580]
+                ], data[0]);
+
+            let geopath = d3.geoPath().projection(projection);
+
+            svg.append("g")
+                .attr("id", "districts")
+                .selectAll("path")
+                .data(data[0].features)
+                .enter()
+                .append("path")
+                .attr("d", geopath)
+                .attr("fill", function (d) {
+                    d.total = listData[0][d.properties.Name] || 0;
+                    return plotColor(d.total);
+                })
+                .attr("stroke", "skyblue")
+                .attr("stroke-width", 0.5)
+                .on("mouseover", (event, d) => {
+                    d3.select(".tooltip")
+                        .text(
+                            "Location: " +
+                            d.properties.Name +
+                            ", Population: " +
+                            listData[0][d.properties.Name]
+                        )
+                        .style("left", event.pageX + "px")
+                        .style("top", event.pageY + "px");
+                })
+                .on("mouseout", (event, d) => {
+                    d3.select(".tooltip").text("");
+                });
+
+            svg.append("g")
+                .attr("transform", "translate(1000, 100)")
+                .call(legend);
+
+        })
+    </script>
+
+</body>
+
+</html>
